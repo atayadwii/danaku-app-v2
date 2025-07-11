@@ -187,15 +187,9 @@ const Dashboard = () => {
 <header className="bg-white/80 backdrop-blur-md shadow-md sticky top-0 z-50">
   <div className="container mx-auto px-4 py-4 flex justify-between items-center">
     {/* Logo / App Title */}
-<h1>
-  <button onClick={() => setActivePage("dashboard")}>
-<h1>
-  <button onClick={() => setActivePage("dashboard")}>
-    <Logo />
-  </button>
-</h1>
-  </button>
-</h1>
+<div onClick={() => setActivePage("dashboard")}>
+  <Logo />
+</div>
 
     {/* Navigation */}
     <nav>

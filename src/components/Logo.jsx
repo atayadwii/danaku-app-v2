@@ -1,5 +1,4 @@
 import React from 'react';
-
 const Logo = ({ className = "" }) => {
   return (
     <div className={`flex items-center space-x-2 ${className}`}>
@@ -13,9 +12,9 @@ const Logo = ({ className = "" }) => {
         {/* Ini adalah ikon koin/dana sederhana. Anda bisa menggantinya dengan ikon SVG lain yang Anda suka. */}
         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-4h-2V7h2v4h2v6z"/>
       </svg>
-      <span className="font-bold text-xl sm:text-2xl text-blue-700">Danaku</span>
-    </div>
-  );
+    <span className="text-2xl font-bold">Danaku</span>
+  </div>
+);
 };
 
 export default Logo;
