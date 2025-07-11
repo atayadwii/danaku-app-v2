@@ -174,11 +174,6 @@ const Dashboard = () => {
       alert("Gagal menambahkan kantong tabungan.");
     }
   };
-
-  if (loading) {
-    return <p className="text-center mt-10">Memuat...</p>;
-  }
-
   const welcomeMessage = user.displayName ? `Hai, ${user.displayName}! ✨` : "Hai! Selamat datang kembali! ✨";
   const weatherIcon = weatherData ? `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png` : null;
 
