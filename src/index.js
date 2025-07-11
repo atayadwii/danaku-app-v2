@@ -15,3 +15,8 @@ root.render(
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
+
+// CATATAN:
+// Semua kode yang terkait dengan Firebase Functions, Firebase Admin,
+// atau @emailjs/nodejs yang sebelumnya ada di sini TELAH DIHAPUS.
+// File ini sekarang hanya berisi kode dasar untuk aplikasi React.
