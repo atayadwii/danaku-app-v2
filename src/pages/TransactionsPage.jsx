@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Trash } from "phosphor-react"; // Import ikon Trash
+// DIBENARKAN: Tambahkan ikon Plus
+import { Trash, Plus } from "phosphor-react";
 
 const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurrency, isManageModalOpen, setIsManageModalOpen, selectedTransactions, setSelectedTransactions, setIsConfirmDeleteOpen, handleAddTransaction, handleAddWallet, handleDeleteWallet, parseNumberFromFormattedString, formatNumberWithDots }) => {
   const [newTransaction, setNewTransaction] = useState({
@@ -17,7 +18,7 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
   });
   
   const currencyOptions = [
-    'IDR', 'EGP', 'GBP', 'USD', 'EUR', 'MYR', 'SAR', 'SGD', 'AUD', 'JPY'
+    'IDR', 'EGP', 'GBP', 'USD', 'EUR', 'IT-IT', 'MYR', 'SAR', 'SGD', 'AUD', 'JPY'
   ];
 
   const handleSubmitTransaction = async (e) => {
@@ -45,97 +46,100 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
     <section id="transactions-section" className="container mx-auto px-4 sm:px-6 py-8 bg-white/90 rounded-2xl shadow-xl p-6 sm:p-10">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-gray-800">💸 Catat Transaksi</h2>
+        {/* DIBENARKAN: Ubah tombol menjadi ikon saja */}
         <button
           onClick={() => setIsCreateWalletModalOpen(true)}
-          className="py-2 px-4 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition"
+          className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition"
+          aria-label="Buat Dompet Baru"
         >
-          + Buat Dompet Baru
+          <Plus size={24} weight="bold" />
         </button>
       </div>
+      
+      {!isManageModalOpen && wallets.length > 0 && (
+        <form id="transaction-form" className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmitTransaction}>
+          <div>
+            <label htmlFor="transaction-wallet" className="text-sm font-medium text-gray-600">Dompet</label>
+            <select
+              id="transaction-wallet"
+              className="mt-1 block w-full p-3 border rounded-lg"
+              value={newTransaction.walletId}
+              onChange={(e) => setNewTransaction({ ...newTransaction, walletId: e.target.value })}
+              required
+            >
+              {wallets.length === 0 ? (
+                <option value="" disabled>Buat dompet terlebih dahulu</option>
+              ) : (
+                wallets.map(wallet => (
+                  <option key={wallet.id} value={wallet.id}>
+                    {wallet.name} ({wallet.currency})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
 
-      <form id="transaction-form" className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmitTransaction}>
-        <div>
-          <label htmlFor="transaction-wallet" className="text-sm font-medium text-gray-600">Dompet</label>
-          <select
-            id="transaction-wallet"
-            className="mt-1 block w-full p-3 border rounded-lg"
-            value={newTransaction.walletId}
-            onChange={(e) => setNewTransaction({ ...newTransaction, walletId: e.target.value })}
-            required
-          >
-            {wallets.length === 0 ? (
-              <option value="" disabled>Buat dompet terlebih dahulu</option>
-            ) : (
-              wallets.map(wallet => (
-                <option key={wallet.id} value={wallet.id}>
-                  {wallet.name} ({wallet.currency})
-                </option>
-              ))
-            )}
-          </select>
-        </div>
+          <div>
+            <label htmlFor="transaction-type" className="text-sm font-medium text-gray-600">Jenis</label>
+            <select
+              id="transaction-type"
+              className="mt-1 block w-full p-3 border rounded-lg"
+              value={newTransaction.type}
+              onChange={(e) => setNewTransaction({ ...newTransaction, type: e.target.value })}
+            >
+              <option value="pengeluaran">Pengeluaran</option>
+              <option value="pemasukan">Pemasukan</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="transaction-category" className="text-sm font-medium text-gray-600">Kategori</label>
+            <input
+              type="text"
+              id="transaction-category"
+              required
+              placeholder="Contoh: Makan, Gaji"
+              className="mt-1 block w-full p-3 border rounded-lg"
+              value={newTransaction.category}
+              onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
+            />
+          </div>
+          <div>
+            <label htmlFor="transaction-amount" className="text-sm font-medium text-gray-600">Jumlah</label>
+            <input
+              type="text"
+              id="transaction-amount"
+              required
+              placeholder={`Contoh: ${formatNumberWithDots(50000)}`}
+              className="mt-1 block w-full p-3 border rounded-lg"
+              value={formatNumberWithDots(newTransaction.amount)}
+              onChange={(e) => setNewTransaction({ ...newTransaction, amount: parseNumberFromFormattedString(e.target.value) })}
+              onFocus={(e) => {
+                e.target.value = newTransaction.amount === '' ? '' : String(newTransaction.amount);
+              }}
+              onBlur={(e) => {
+                e.target.value = formatNumberWithDots(newTransaction.amount);
+              }}
+            />
+          </div>
+          <div>
+            <label htmlFor="transaction-date" className="text-sm font-medium text-gray-600">Tanggal</label>
+            <input
+              type="date"
+              id="transaction-date"
+              required
+              className="mt-1 block w-full p-3 border rounded-lg"
+              value={newTransaction.date}
+              onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition" disabled={wallets.length === 0}>
+              Tambah Transaksi
+            </button>
+          </div>
+        </form>
+      )}
 
-        <div>
-          <label htmlFor="transaction-type" className="text-sm font-medium text-gray-600">Jenis</label>
-          <select
-            id="transaction-type"
-            className="mt-1 block w-full p-3 border rounded-lg"
-            value={newTransaction.type}
-            onChange={(e) => setNewTransaction({ ...newTransaction, type: e.target.value })}
-          >
-            <option value="pengeluaran">Pengeluaran</option>
-            <option value="pemasukan">Pemasukan</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="transaction-category" className="text-sm font-medium text-gray-600">Kategori</label>
-          <input
-            type="text"
-            id="transaction-category"
-            required
-            placeholder="Contoh: Makan, Gaji"
-            className="mt-1 block w-full p-3 border rounded-lg"
-            value={newTransaction.category}
-            onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="transaction-amount" className="text-sm font-medium text-gray-600">Jumlah</label>
-          <input
-            type="text"
-            id="transaction-amount"
-            required
-            placeholder={`Contoh: ${formatNumberWithDots(50000)}`}
-            className="mt-1 block w-full p-3 border rounded-lg"
-            value={formatNumberWithDots(newTransaction.amount)}
-            onChange={(e) => setNewTransaction({ ...newTransaction, amount: parseNumberFromFormattedString(e.target.value) })}
-            onFocus={(e) => {
-              e.target.value = newTransaction.amount === '' ? '' : String(newTransaction.amount);
-            }}
-            onBlur={(e) => {
-              e.target.value = formatNumberWithDots(newTransaction.amount);
-            }}
-          />
-        </div>
-        <div>
-          <label htmlFor="transaction-date" className="text-sm font-medium text-gray-600">Tanggal</label>
-          <input
-            type="date"
-            id="transaction-date"
-            required
-            className="mt-1 block w-full p-3 border rounded-lg"
-            value={newTransaction.date}
-            onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition" disabled={wallets.length === 0}>
-            Tambah Transaksi
-          </button>
-        </div>
-      </form>
-
-      {/* FITUR BARU: Modal untuk membuat dompet baru */}
       {isCreateWalletModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 relative">
@@ -183,7 +187,6 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
         </div>
       )}
 
-      {/* FITUR BARU: Bagian untuk menampilkan dompet */}
       <div className="mt-10">
         <h3 className="text-lg sm:text-xl font-semibold mb-3">👛 Dompet Anda</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
