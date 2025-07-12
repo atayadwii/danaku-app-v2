@@ -176,11 +176,20 @@ const Dashboard = () => {
     }
   };
 
-  // if (loading) { // Dihapus
-  //   return <p className="text-center mt-10">Memuat...</p>; // Dihapus
-  // }
+if (!user) {
+  return (
+    <main className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#fef9f9] via-[#f5faff] to-[#e6f0ff]">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-gray-600">Memuat dashboard...</p>
+      </div>
+    </main>
+  );
+}
 
-  const welcomeMessage = user.displayName ? `Hai, ${user.displayName}! ✨` : "Hai! Selamat datang kembali! ✨";
+const welcomeMessage = user && user.displayName
+  ? `Hai, ${user.displayName}! ✨`
+  : "Hai! Selamat datang kembali! ✨";
   const weatherIcon = weatherData ? `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png` : null;
 
 return (
