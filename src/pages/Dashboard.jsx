@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import Logo from "../components/Logo";
 import { CaretDown, Wallet, User, TrendDown } from "phosphor-react";
 import { onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
-import { collection, getDocs, updateDoc, doc, addDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, addDoc, deleteDoc, getDoc, query, where, runTransaction } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 // Import komponen halaman yang baru
@@ -37,9 +37,7 @@ const getLocaleForCurrency = (currencyCode) => {
     case 'MYR': return 'ms-MY'; // Malaysia
     case 'SAR': return 'ar-SA'; // Arab (Saudi Arabia, umum)
     case 'SGD': return 'en-SG'; // Singapura
-    // DIBENARKAN: Tambahkan 'return' di sini
     case 'AUD': return 'en-AU'; // Australia
-    // DIBENARKAN: Tambahkan 'return' di sini
     case 'JPY': return 'ja-JP'; // Jepang (untuk Yen)
     default: return 'id-ID'; // Fallback
   }
@@ -52,11 +50,11 @@ const Dashboard = () => {
   const [savingsPockets, setSavingsPockets] = useState([]);
   const [inputAmounts, setInputAmounts] = useState({});
   const [transactions, setTransactions] = useState([]);
+  const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editCurrency, setEditCurrency] = useState("IDR");
 
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
@@ -112,11 +110,9 @@ const Dashboard = () => {
         setUser({
           ...currentUser,
           displayName: userDataFromFirestore.name || currentUser.displayName,
-          currency: userDataFromFirestore.currency || "IDR"
         });
 
         setEditName(userDataFromFirestore.name || currentUser.displayName || "");
-        setEditCurrency(userDataFromFirestore.currency || "IDR");
 
         await fetchData(currentUser);
         setLoading(false);
@@ -129,6 +125,10 @@ const Dashboard = () => {
   }, []);
 
   const fetchData = async (currentUser) => {
+    const walletsSnap = await getDocs(collection(db, "users", currentUser.uid, "wallets"));
+    const walletsData = walletsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setWallets(walletsData);
+
     const savingsSnap = await getDocs(collection(db, "users", currentUser.uid, "savings"));
     const savingsData = savingsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     setSavingsPockets(savingsData);
@@ -149,15 +149,26 @@ const Dashboard = () => {
     if (isNaN(amount) || rawInput === "") return;
 
     const pocket = savingsPockets[index];
-    const current = pocket.currentAmount || 0;
-    const updatedAmount = current + amount;
+    const pocketRef = doc(db, "users", user.uid, "savings", pocket.id);
 
-    await updateDoc(doc(db, "users", user.uid, "savings", pocket.id), {
-      currentAmount: updatedAmount
-    });
-
-    await fetchData(user);
-    setInputAmounts(prev => ({ ...prev, [index]: "" }));
+    try {
+      await runTransaction(db, async (transaction) => {
+        const pocketDoc = await transaction.get(pocketRef);
+        if (!pocketDoc.exists()) {
+          throw "Document does not exist!";
+        }
+        const newAmount = (pocketDoc.data().currentAmount || 0) + amount;
+        if (newAmount < 0) {
+          throw "Jumlah tidak boleh kurang dari 0";
+        }
+        transaction.update(pocketRef, { currentAmount: newAmount });
+      });
+      await fetchData(user);
+      setInputAmounts(prev => ({ ...prev, [index]: "" }));
+    } catch (e) {
+      console.error("Gagal menambah jumlah: ", e);
+      alert(e);
+    }
   };
 
   const handleDeletePocket = async (index) => {
@@ -169,8 +180,8 @@ const Dashboard = () => {
   const handleLogout = () => {
     signOut(auth).then(() => window.location.href = "/login");
   };
-
-  const totalBalance = transactions.reduce((acc, t) => acc + (t.type === "pemasukan" ? t.amount : -t.amount), 0);
+  
+  const totalBalance = wallets.reduce((acc, wallet) => acc + wallet.balance, 0);
 
   const largestExpense = () => {
     const expenses = transactions.filter(t => t.type === "pengeluaran");
@@ -187,19 +198,26 @@ const Dashboard = () => {
     if (isNaN(amount) || amount <= 0) return;
 
     const pocket = savingsPockets[index];
-    const updatedAmount = (pocket.currentAmount || 0) - amount;
+    const pocketRef = doc(db, "users", user.uid, "savings", pocket.id);
 
-    if (updatedAmount < 0) {
-      alert("Jumlah tidak boleh kurang dari 0");
-      return;
+    try {
+      await runTransaction(db, async (transaction) => {
+        const pocketDoc = await transaction.get(pocketRef);
+        if (!pocketDoc.exists()) {
+          throw "Document does not exist!";
+        }
+        const newAmount = (pocketDoc.data().currentAmount || 0) - amount;
+        if (newAmount < 0) {
+          throw "Jumlah tidak boleh kurang dari 0";
+        }
+        transaction.update(pocketRef, { currentAmount: newAmount });
+      });
+      await fetchData(user);
+      setInputAmounts(prev => ({ ...prev, [index]: "" }));
+    } catch (e) {
+      console.error("Gagal mengurangi jumlah: ", e);
+      alert(e);
     }
-
-    await updateDoc(doc(db, "users", user.uid, "savings", pocket.id), {
-      currentAmount: updatedAmount
-    });
-
-    await fetchData(user);
-    setInputAmounts(prev => ({ ...prev, [index]: "" }));
   };
 
   const executeDeleteSelectedTransactions = async () => {
@@ -211,15 +229,42 @@ const Dashboard = () => {
       return;
     }
 
-    console.log("Mencoba menghapus transaksi dengan ID:", validSelectedIds);
-
+    const transactionsToDelete = transactions.filter(t => validSelectedIds.includes(t.id));
+    
     try {
-      await Promise.all(
-        validSelectedIds.map((id) =>
-          deleteDoc(doc(db, "users", user.uid, "transactions", id))
-        )
-      );
-      console.log(`Berhasil menghapus ${validSelectedIds.length} transaksi.`);
+      await runTransaction(db, async (transaction) => {
+        const walletBalanceUpdates = {};
+
+        for (const t of transactionsToDelete) {
+          const walletId = t.walletId;
+          const amount = t.amount;
+          const type = t.type;
+          
+          if (!walletBalanceUpdates[walletId]) {
+            const walletRef = doc(db, "users", user.uid, "wallets", walletId);
+            const walletDoc = await transaction.get(walletRef);
+            if (!walletDoc.exists()) continue;
+            walletBalanceUpdates[walletId] = walletDoc.data().balance || 0;
+          }
+
+          if (type === 'pemasukan') {
+            walletBalanceUpdates[walletId] -= amount;
+          } else {
+            walletBalanceUpdates[walletId] += amount;
+          }
+        }
+        
+        for (const walletId in walletBalanceUpdates) {
+          transaction.update(doc(db, "users", user.uid, "wallets", walletId), {
+            balance: walletBalanceUpdates[walletId]
+          });
+        }
+
+        for (const id of validSelectedIds) {
+          transaction.delete(doc(db, "users", user.uid, "transactions", id));
+        }
+      });
+      
       await fetchData(user);
       setSelectedTransactions([]);
       setIsManageModalOpen(false);
@@ -231,6 +276,44 @@ const Dashboard = () => {
     }
   };
 
+  const handleAddWallet = async (walletData) => {
+    try {
+      await addDoc(collection(db, "users", user.uid, "wallets"), {
+        ...walletData,
+        balance: 0,
+      });
+      await fetchData(user);
+    } catch (error) {
+      console.error("Error adding wallet: ", error);
+      alert("Gagal menambahkan dompet.");
+    }
+  };
+  
+  const handleDeleteWallet = async (walletId) => {
+    if (window.confirm("Yakin ingin menghapus dompet ini? Seluruh riwayat transaksi di dompet ini juga akan terhapus.")) {
+      try {
+        await runTransaction(db, async (transaction) => {
+          const q = query(collection(db, "users", user.uid, "transactions"), where("walletId", "==", walletId));
+          const transactionsSnap = await getDocs(q);
+          
+          if (!transactionsSnap.empty) {
+            transactionsSnap.forEach(tDoc => {
+              transaction.delete(doc(db, "users", user.uid, "transactions", tDoc.id));
+            });
+          }
+
+          transaction.delete(doc(db, "users", user.uid, "wallets", walletId));
+        });
+        
+        await fetchData(user);
+        
+      } catch (error) {
+        console.error("Error deleting wallet and transactions: ", error);
+        alert("Gagal menghapus dompet.");
+      }
+    }
+  };
+
   const handleUpdateProfile = async () => {
     try {
       await updateProfile(auth.currentUser, {
@@ -239,13 +322,11 @@ const Dashboard = () => {
 
       await updateDoc(doc(db, "users", user.uid), {
         name: editName,
-        currency: editCurrency
       });
 
       setUser(prevUser => ({
         ...prevUser,
         displayName: editName,
-        currency: editCurrency
       }));
 
       setIsEditProfileOpen(false);
@@ -254,18 +335,47 @@ const Dashboard = () => {
       alert("Gagal menyimpan perubahan profil.");
     }
   };
-
+  
+  // DIBENARKAN: Mengubah kembali logika handleAddTransaction menjadi non-transaksi
   const handleAddTransaction = async (newTransactionData) => {
-    if (!newTransactionData.category || newTransactionData.amount === '' || !newTransactionData.date) {
+    if (!newTransactionData.category || newTransactionData.amount === '' || !newTransactionData.date || !newTransactionData.walletId) {
       alert("Semua kolom harus diisi.");
       return;
     }
+    
+    // Gunakan getDoc dan updateDoc terpisah untuk menghindari isu race-condition
+    const walletRef = doc(db, "users", user.uid, "wallets", newTransactionData.walletId);
+    
     try {
+      const walletSnap = await getDoc(walletRef);
+      if (!walletSnap.exists()) {
+        alert("Dompet tidak ditemukan.");
+        return;
+      }
+      
+      const walletData = walletSnap.data();
+      const currentBalance = walletData.balance || 0;
+      let updatedBalance;
+      const amount = parseFloat(newTransactionData.amount);
+
+      if (newTransactionData.type === 'pemasukan') {
+        updatedBalance = currentBalance + amount;
+      } else {
+        updatedBalance = currentBalance - amount;
+      }
+      
+      if (updatedBalance < 0) {
+        alert("Saldo dompet tidak cukup.");
+        return;
+      }
+
+      await updateDoc(walletRef, { balance: updatedBalance });
       await addDoc(collection(db, "users", user.uid, "transactions"), {
         ...newTransactionData,
-        amount: parseFloat(newTransactionData.amount),
+        amount: amount,
         timestamp: new Date()
       });
+      
       await fetchData(user);
     } catch (error) {
       console.error("Error adding transaction: ", error);
@@ -296,13 +406,11 @@ const Dashboard = () => {
     return <p className="text-center mt-10">Memuat...</p>;
   }
 
-  const currentCurrency = user.currency || "IDR";
-  const currencyLocale = getLocaleForCurrency(currentCurrency);
-
-  const formatCurrency = (amount) => {
-    return amount.toLocaleString(currencyLocale, { style: 'currency', currency: currentCurrency });
+  const formatCurrency = (amount, currencyCode) => {
+    const locale = getLocaleForCurrency(currencyCode);
+    return amount.toLocaleString(locale, { style: 'currency', currency: currencyCode });
   };
-
+  
   const welcomeMessage = user.displayName ? `Hai, ${user.displayName}! ✨` : "Hai! Selamat datang kembali! ✨";
   const weatherIcon = weatherData ? `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png` : null;
 
@@ -380,6 +488,7 @@ const Dashboard = () => {
           largestExpense={largestExpense}
           savingsPockets={savingsPockets}
           transactions={transactions}
+          wallets={wallets}
           formatCurrency={formatCurrency}
           handleAddAmount={handleAddAmount}
           handleSubtractAmount={handleSubtractAmount}
@@ -395,6 +504,7 @@ const Dashboard = () => {
         <TransactionsPage
           user={user}
           transactions={transactions}
+          wallets={wallets}
           fetchData={fetchData}
           formatCurrency={formatCurrency}
           isManageModalOpen={isManageModalOpen}
@@ -403,6 +513,8 @@ const Dashboard = () => {
           setSelectedTransactions={setSelectedTransactions}
           setIsConfirmDeleteOpen={setIsConfirmDeleteOpen}
           handleAddTransaction={handleAddTransaction}
+          handleAddWallet={handleAddWallet}
+          handleDeleteWallet={handleDeleteWallet}
           parseNumberFromFormattedString={parseNumberFromFormattedString}
           formatNumberWithDots={formatNumberWithDots}
         />
@@ -457,7 +569,7 @@ const Dashboard = () => {
             <div className="bg-green-50 rounded-xl p-4 text-center mb-4 shadow-inner">
               <p className="text-sm text-gray-600 mb-1">Total Saldo</p>
               <p className="text-2xl font-bold text-green-700">
-                {formatCurrency(totalBalance)}
+                {formatNumberWithDots(totalBalance)}
               </p>
             </div>
 
@@ -481,7 +593,6 @@ const Dashboard = () => {
             <button
               onClick={() => {
                 setEditName(user.displayName || "");
-                setEditCurrency(user.currency || "IDR");
                 setIsEditProfileOpen(true);
                 setIsAccountPopupOpen(false);
               }}
@@ -526,27 +637,6 @@ const Dashboard = () => {
                 />
               </div>
 
-              {/* Ganti Mata Uang */}
-              <div>
-                <label className="text-sm font-medium text-gray-600 block mb-1">Mata Uang</label>
-                <select
-                  className="w-full p-3 border rounded-lg"
-                  value={editCurrency}
-                  onChange={(e) => setEditCurrency(e.target.value)}
-                >
-                  <option value="IDR">Rupiah (IDR)</option>
-                  <option value="EGP">Pound Mesir (EGP)</option>
-                  <option value="GBP">Pound Sterling (GBP)</option>
-                  <option value="USD">Dolar Amerika (USD)</option>
-                  <option value="EUR">Euro (EUR)</option>
-                  <option value="MYR">Ringgit Malaysia (MYR)</option>
-                  <option value="SAR">Riyal Saudi (SAR)</option>
-                  <option value="SGD">Dolar Singapura (SGD)</option>
-                  <option value="AUD">Dolar Australia (AUD)</option>
-                  <option value="JPY">Yen Jepang (JPY)</option>
-                </select>
-              </div>
-
               {/* Tombol Simpan */}
               <button
                 onClick={handleUpdateProfile}
@@ -588,34 +678,37 @@ const Dashboard = () => {
                     <th className="py-3 px-5">Tanggal</th>
                     <th className="py-3 px-5">Jenis</th>
                     <th className="py-3 px-5">Kategori</th>
-                    <th className="py-3 px-5">Jumlah ({user.currency || 'IDR'})</th>
+                    <th className="py-3 px-5">Jumlah</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {transactions.length === 0 ? (
                     <tr><td colSpan="5" className="text-center py-4 text-gray-500">Tidak ada transaksi untuk dikelola.</td></tr>
                   ) : (
-                    transactions.map((t) => (
-                      <tr key={t.id}>
-                        <td className="px-5 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedTransactions.includes(t.id)}
-                            onChange={() => {
-                              setSelectedTransactions((prev) =>
-                                prev.includes(t.id)
-                                  ? prev.filter((id) => id !== t.id)
-                                  : [...prev, t.id]
-                              );
-                            }}
-                          />
-                        </td>
-                        <td className="px-5 py-3">{t.date}</td>
-                        <td className={`px-5 py-3 ${t.type === "pengeluaran" ? "text-red-600" : "text-green-600"}`}>{t.type}</td>
-                        <td className="px-5 py-3">{t.category}</td>
-                        <td className="px-5 py-3">{formatCurrency(t.amount)}</td>
-                      </tr>
-                    ))
+                    transactions.map((t) => {
+                      const wallet = wallets.find(w => w.id === t.walletId) || { currency: 'IDR' };
+                      return (
+                        <tr key={t.id}>
+                          <td className="px-5 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedTransactions.includes(t.id)}
+                              onChange={() => {
+                                setSelectedTransactions((prev) =>
+                                  prev.includes(t.id)
+                                    ? prev.filter((id) => id !== t.id)
+                                    : [...prev, t.id]
+                                );
+                              }}
+                            />
+                          </td>
+                          <td className="px-5 py-3">{t.date}</td>
+                          <td className={`px-5 py-3 ${t.type === "pengeluaran" ? "text-red-600" : "text-green-600"}`}>{t.type}</td>
+                          <td className="px-5 py-3">{t.category}</td>
+                          <td className="px-5 py-3">{formatCurrency(t.amount, wallet.currency)}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
