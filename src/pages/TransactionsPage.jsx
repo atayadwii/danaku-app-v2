@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-// DIBENARKAN: Tambahkan ikon Plus
+import React, { useState, useEffect } from "react";
 import { Trash, Plus } from "phosphor-react";
 
 const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurrency, isManageModalOpen, setIsManageModalOpen, selectedTransactions, setSelectedTransactions, setIsConfirmDeleteOpen, handleAddTransaction, handleAddWallet, handleDeleteWallet, parseNumberFromFormattedString, formatNumberWithDots }) => {
@@ -8,8 +7,18 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
     category: '',
     amount: '',
     date: '',
-    walletId: wallets.length > 0 ? wallets[0].id : ''
+    walletId: '' // DIBENARKAN: Inisialisasi awal dengan string kosong
   });
+
+  // DIBENARKAN: Gunakan useEffect untuk sinkronisasi state
+  useEffect(() => {
+    if (wallets.length > 0 && !newTransaction.walletId) {
+      setNewTransaction(prev => ({
+        ...prev,
+        walletId: wallets[0].id
+      }));
+    }
+  }, [wallets, newTransaction.walletId]);
 
   const [isCreateWalletModalOpen, setIsCreateWalletModalOpen] = useState(false);
   const [newWallet, setNewWallet] = useState({
@@ -28,6 +37,7 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
       return;
     }
     await handleAddTransaction(newTransaction);
+    // DIBENARKAN: Atur ulang walletId setelah submit
     setNewTransaction({ type: 'pengeluaran', category: '', amount: '', date: '', walletId: wallets.length > 0 ? wallets[0].id : '' });
   };
   
@@ -46,7 +56,6 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
     <section id="transactions-section" className="container mx-auto px-4 sm:px-6 py-8 bg-white/90 rounded-2xl shadow-xl p-6 sm:p-10">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-gray-800">💸 Catat Transaksi</h2>
-        {/* DIBENARKAN: Ubah tombol menjadi ikon saja */}
         <button
           onClick={() => setIsCreateWalletModalOpen(true)}
           className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition"
