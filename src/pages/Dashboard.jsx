@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import Logo from "../components/Logo";
-import { CaretDown, Wallet,UserCircle } from "phosphor-react";
+import Logo from "../components/logo";
+import { CaretDown, Wallet, User} from "phosphor-react"; // Menambahkan Sparkle
 import { auth, db } from "../firebase";
-import { onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth"; // updateProfile dihapus
 import {
   collection,
   getDocs,
@@ -14,11 +14,11 @@ import {
 
 const Dashboard = () => {
   const [activePage, setActivePage] = useState("dashboard");
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState({}); // Diubah dari null menjadi {}
   const [savingsPockets, setSavingsPockets] = useState([]);
   const [inputAmounts, setInputAmounts] = useState({});
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // const [loading, setLoading] = useState(true); // Dihapus
 
   // --- Fungsionalitas Tambahan untuk Halaman Info Akun ---
   const [weatherData, setWeatherData] = useState(null);
@@ -27,7 +27,8 @@ const Dashboard = () => {
   const [isAccountPopupOpen, setIsAccountPopupOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
-  const defaultProfilePic = "https://firebasestorage.googleapis.com/v0/b/danaku-web.appspot.com/o/profile_pics%2Fdefault-user.png?alt=media&token=c8b598b9-5369-4e78-b183-b46187740e53";
+  // defaultProfilePic tidak lagi diperlukan karena foto profil dihapus
+  // const defaultProfilePic = "https://firebasestorage.googleapis.com/v0/b/danaku-web.appspot.com/o/profile_pics%2Fdefault-user.png?alt=media&token=c8b598b9-5369-4e78-b183-b46187740e53";
 
   const fetchWeather = async () => {
     setWeatherLoading(true);
@@ -73,7 +74,7 @@ const Dashboard = () => {
       if (currentUser) {
         setUser(currentUser);
         await fetchData(currentUser);
-        setLoading(false);
+        // setLoading(false); // Dihapus
       } else {
         window.location.href = "/login";
       }
@@ -174,79 +175,90 @@ const Dashboard = () => {
       alert("Gagal menambahkan kantong tabungan.");
     }
   };
+
+  // if (loading) { // Dihapus
+  //   return <p className="text-center mt-10">Memuat...</p>; // Dihapus
+  // }
+
   const welcomeMessage = user.displayName ? `Hai, ${user.displayName}! ✨` : "Hai! Selamat datang kembali! ✨";
   const weatherIcon = weatherData ? `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png` : null;
 
-  return (
-    <main className="bg-gradient-to-br from-[#fef9f9] via-[#f5faff] to-[#e6f0ff] text-gray-800 min-h-screen flex flex-col">
-<header className="bg-white/80 backdrop-blur-md shadow-md sticky top-0 z-50">
-  <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-    {/* Logo / App Title */}
-<div onClick={() => setActivePage("dashboard")}>
-  <Logo />
-</div>
+return (
+  <main className="bg-gradient-to-br from-[#fef9f9] via-[#f5faff] to-[#e6f0ff] text-gray-800 min-h-screen flex flex-col">
+    <header className="bg-white/80 backdrop-blur-md shadow-md sticky top-0 z-50">
+      <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+        {/* Logo / App Title */}
+        <div
+          onClick={() => setActivePage("dashboard")}
+          className="cursor-pointer"
+        >
+          <Logo />
+        </div>
 
-    {/* Navigation */}
-    <nav>
-      <ul className="flex space-x-4 items-center text-sm sm:text-base font-medium">
-        {/* Dashboard */}
-        <li>
-          <button
-            onClick={() => setActivePage("dashboard")}
-            className="hover:text-blue-500"
-          >
-            Dashboard
-          </button>
-        </li>
-
-        {/* Dropdown: Kelola Uang */}
-        <li className="relative">
-          <button
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="hover:text-blue-500 flex items-center"
-          >
-            <Wallet size={28} className="mr-1 text-blue-700" />
-            <CaretDown size={15} weight="fill" className="text-blue-700" />
-          </button>
-
-          {isDropdownOpen && (
-            <div className="absolute top-full left-0 mt-2 w-40 bg-white rounded-md shadow-lg z-10">
+        {/* Navigation */}
+        <nav>
+          <ul className="flex space-x-4 items-center text-sm sm:text-base font-medium">
+            {/* Dashboard */}
+            <li>
               <button
-                onClick={() => {
-                  setActivePage("transactions");
-                  setIsDropdownOpen(false);
-                }}
-                className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                onClick={() => setActivePage("dashboard")}
+                className="hover:text-blue-500"
               >
-                Transaksi
+                Dashboard
               </button>
+            </li>
+
+            {/* Dropdown: Kelola Uang */}
+            <li className="relative">
               <button
-                onClick={() => {
-                  setActivePage("savings");
-                  setIsDropdownOpen(false);
-                }}
-                className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                type="button"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="hover:text-blue-500 flex items-center"
               >
-                Tabungan
+                <Wallet size={28} className="mr-1 text-blue-700" />
+                <CaretDown size={15} weight="fill" className="text-blue-700" />
               </button>
-            </div>
-          )}
-        </li>
 
-        {/* Account Icon */}
-        <li>
-          <button
-            onClick={() => setIsAccountPopupOpen(true)}
-            className="hover:text-blue-500"
-          >
-            <UserCircle size={28} className="text-blue-700" />
-          </button>
-        </li>
-      </ul>
-    </nav>
-  </div>
-</header>
+              {isDropdownOpen && (
+                <div className="absolute top-full left-0 mt-2 w-40 bg-white rounded-md shadow-lg z-10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePage("transactions");
+                      setIsDropdownOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                  >
+                    Transaksi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePage("savings");
+                      setIsDropdownOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                  >
+                    Tabungan
+                  </button>
+                </div>
+              )}
+            </li>
 
+            {/* Account Icon */}
+            <li>
+              <button
+                type="button"
+                onClick={() => setIsAccountPopupOpen(true)}
+                className="hover:text-blue-500"
+              >
+                <User size={28} className="text-blue-700" />
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
       {/* === Halaman Dashboard === */}
       {activePage === "dashboard" && (
         <section className="container mx-auto px-4 sm:px-6 py-8 bg-white/90 rounded-2xl shadow-xl p-6 sm:p-10">
@@ -501,9 +513,8 @@ const Dashboard = () => {
               <h3 className="text-2xl font-bold text-blue-700 mb-2">Info Akun</h3>
               <p className="text-sm text-gray-500">Lihat profil dan status cuaca.</p> {/* Teks diperbarui */}
             </div>
-
             <div className="flex flex-col items-center mb-6">
-              <p className="text-xl font-bold text-gray-800">{user.displayName || "Pengguna Danaku"}</p>
+              <p className="text-xl font-bold text-gray-800">{user.displayName || "User"}</p>
               <p className="text-sm text-gray-600">{user.email}</p>
             </div>
             <div className="card-glass p-6 rounded-xl shadow-md text-center mb-6">
