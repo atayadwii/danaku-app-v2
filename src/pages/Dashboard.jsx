@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import Logo from "../components/logo";
+import Logo from "../components/Logo";
 import { CaretDown, Wallet, User} from "phosphor-react"; // Menambahkan Sparkle
 import { auth, db } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth"; // updateProfile dihapus
