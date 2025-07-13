@@ -12,7 +12,7 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
 
   // DIBENARKAN: Gunakan useEffect untuk sinkronisasi state
   useEffect(() => {
-    if (wallets.length > 0 && !newTransaction.walletId) {
+    if (wallets.length > 0 && newTransaction.walletId === '') {
       setNewTransaction(prev => ({
         ...prev,
         walletId: wallets[0].id
@@ -37,7 +37,6 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
       return;
     }
     await handleAddTransaction(newTransaction);
-    // DIBENARKAN: Atur ulang walletId setelah submit
     setNewTransaction({ type: 'pengeluaran', category: '', amount: '', date: '', walletId: wallets.length > 0 ? wallets[0].id : '' });
   };
   

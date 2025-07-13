@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import Logo from "../components/Logo";
-import { CaretDown, Wallet, User, TrendDown } from "phosphor-react";
+import { CaretDown, Wallet, User } from "phosphor-react";
 import { onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
-import { collection, getDocs, updateDoc, doc, addDoc, deleteDoc, getDoc, query, where, runTransaction } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, addDoc, deleteDoc, query, where, runTransaction, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 // Import komponen halaman yang baru
 import DashboardContent from "./DashboardContent";
 import TransactionsPage from "./TransactionsPage";
 import SavingsPage from "./SavingsPage";
+import AccountPage from "./AccountPage";
 
 // Helper untuk memformat angka dengan titik (pemisah ribuan)
 const formatNumberWithDots = (num) => {
@@ -59,7 +60,6 @@ const Dashboard = () => {
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState(null);
-  const [isAccountPopupOpen, setIsAccountPopupOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -114,16 +114,37 @@ const Dashboard = () => {
 
         setEditName(userDataFromFirestore.name || currentUser.displayName || "");
 
-        await fetchData(currentUser);
-        setLoading(false);
+        const walletsUnsubscribe = onSnapshot(collection(db, "users", currentUser.uid, "wallets"), (snapshot) => {
+            const walletsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setWallets(walletsData);
+            setLoading(false);
+        });
+
+        const savingsUnsubscribe = onSnapshot(collection(db, "users", currentUser.uid, "savings"), (snapshot) => {
+            const savingsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setSavingsPockets(savingsData);
+        });
+
+        const transactionsUnsubscribe = onSnapshot(collection(db, "users", currentUser.uid, "transactions"), (snapshot) => {
+            const transData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTransactions(transData);
+        });
+
+        fetchWeather();
+        
+        return () => {
+            walletsUnsubscribe();
+            savingsUnsubscribe();
+            transactionsUnsubscribe();
+        };
+
       } else {
         window.location.href = "/login";
       }
     });
-    fetchWeather();
     return () => unsubscribe();
   }, []);
-
+  
   const fetchData = async (currentUser) => {
     const walletsSnap = await getDocs(collection(db, "users", currentUser.uid, "wallets"));
     const walletsData = walletsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -137,6 +158,7 @@ const Dashboard = () => {
     const transData = transSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     setTransactions(transData);
   };
+
 
   const handleInputChange = (index, value) => {
     setInputAmounts(prev => ({ ...prev, [index]: value }));
@@ -155,26 +177,24 @@ const Dashboard = () => {
       await runTransaction(db, async (transaction) => {
         const pocketDoc = await transaction.get(pocketRef);
         if (!pocketDoc.exists()) {
-          throw "Document does not exist!";
+          throw new Error("Document does not exist!");
         }
         const newAmount = (pocketDoc.data().currentAmount || 0) + amount;
         if (newAmount < 0) {
-          throw "Jumlah tidak boleh kurang dari 0";
+          throw new Error("Jumlah tidak boleh kurang dari 0");
         }
         transaction.update(pocketRef, { currentAmount: newAmount });
       });
-      await fetchData(user);
       setInputAmounts(prev => ({ ...prev, [index]: "" }));
     } catch (e) {
       console.error("Gagal menambah jumlah: ", e);
-      alert(e);
+      alert(e.message);
     }
   };
 
   const handleDeletePocket = async (index) => {
     const pocket = savingsPockets[index];
     await deleteDoc(doc(db, "users", user.uid, "savings", pocket.id));
-    await fetchData(user);
   };
 
   const handleLogout = () => {
@@ -204,19 +224,18 @@ const Dashboard = () => {
       await runTransaction(db, async (transaction) => {
         const pocketDoc = await transaction.get(pocketRef);
         if (!pocketDoc.exists()) {
-          throw "Document does not exist!";
+          throw new Error("Document does not exist!");
         }
         const newAmount = (pocketDoc.data().currentAmount || 0) - amount;
         if (newAmount < 0) {
-          throw "Jumlah tidak boleh kurang dari 0";
+          throw new Error("Jumlah tidak boleh kurang dari 0");
         }
         transaction.update(pocketRef, { currentAmount: newAmount });
       });
-      await fetchData(user);
       setInputAmounts(prev => ({ ...prev, [index]: "" }));
     } catch (e) {
       console.error("Gagal mengurangi jumlah: ", e);
-      alert(e);
+      alert(e.message);
     }
   };
 
@@ -265,7 +284,6 @@ const Dashboard = () => {
         }
       });
       
-      await fetchData(user);
       setSelectedTransactions([]);
       setIsManageModalOpen(false);
       setIsConfirmDeleteOpen(false);
@@ -282,7 +300,6 @@ const Dashboard = () => {
         ...walletData,
         balance: 0,
       });
-      await fetchData(user);
     } catch (error) {
       console.error("Error adding wallet: ", error);
       alert("Gagal menambahkan dompet.");
@@ -305,8 +322,6 @@ const Dashboard = () => {
           transaction.delete(doc(db, "users", user.uid, "wallets", walletId));
         });
         
-        await fetchData(user);
-        
       } catch (error) {
         console.error("Error deleting wallet and transactions: ", error);
         alert("Gagal menghapus dompet.");
@@ -314,7 +329,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleUpdateProfile = async () => {
+  const handleUpdateProfile = async (editName) => {
     try {
       await updateProfile(auth.currentUser, {
         displayName: editName
@@ -336,50 +351,45 @@ const Dashboard = () => {
     }
   };
   
-  // DIBENARKAN: Mengubah kembali logika handleAddTransaction menjadi non-transaksi
   const handleAddTransaction = async (newTransactionData) => {
     if (!newTransactionData.category || newTransactionData.amount === '' || !newTransactionData.date || !newTransactionData.walletId) {
       alert("Semua kolom harus diisi.");
       return;
     }
     
-    // Gunakan getDoc dan updateDoc terpisah untuk menghindari isu race-condition
     const walletRef = doc(db, "users", user.uid, "wallets", newTransactionData.walletId);
     
     try {
-      const walletSnap = await getDoc(walletRef);
-      if (!walletSnap.exists()) {
-        alert("Dompet tidak ditemukan.");
-        return;
-      }
-      
-      const walletData = walletSnap.data();
-      const currentBalance = walletData.balance || 0;
-      let updatedBalance;
-      const amount = parseFloat(newTransactionData.amount);
+      await runTransaction(db, async (transaction) => {
+        const walletDoc = await transaction.get(walletRef);
+        if (!walletDoc.exists()) {
+          throw new Error("Dompet tidak ditemukan.");
+        }
 
-      if (newTransactionData.type === 'pemasukan') {
-        updatedBalance = currentBalance + amount;
-      } else {
-        updatedBalance = currentBalance - amount;
-      }
-      
-      if (updatedBalance < 0) {
-        alert("Saldo dompet tidak cukup.");
-        return;
-      }
+        const currentBalance = walletDoc.data().balance || 0;
+        let updatedBalance;
+        const amount = parseFloat(newTransactionData.amount);
 
-      await updateDoc(walletRef, { balance: updatedBalance });
-      await addDoc(collection(db, "users", user.uid, "transactions"), {
-        ...newTransactionData,
-        amount: amount,
-        timestamp: new Date()
+        if (newTransactionData.type === 'pemasukan') {
+          updatedBalance = currentBalance + amount;
+        } else {
+          updatedBalance = currentBalance - amount;
+        }
+
+        if (updatedBalance < 0) {
+          throw new Error("Saldo dompet tidak cukup.");
+        }
+        
+        transaction.update(walletRef, { balance: updatedBalance });
+        transaction.set(doc(collection(db, "users", user.uid, "transactions")), {
+          ...newTransactionData,
+          amount: amount,
+          timestamp: new Date()
+        });
       });
-      
-      await fetchData(user);
     } catch (error) {
       console.error("Error adding transaction: ", error);
-      alert("Gagal menambahkan transaksi.");
+      alert(error.message);
     }
   };
 
@@ -394,7 +404,6 @@ const Dashboard = () => {
         target: parseFloat(newPocketData.target),
         currentAmount: 0
       });
-      await fetchData(user);
     } catch (error) {
       console.error("Error adding savings pocket: ", error);
       alert("Gagal menambahkan kantong tabungan.");
@@ -412,8 +421,7 @@ const Dashboard = () => {
   };
   
   const welcomeMessage = user.displayName ? `Hai, ${user.displayName}! ✨` : "Hai! Selamat datang kembali! ✨";
-  const weatherIcon = weatherData ? `https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png` : null;
-
+  
   return (
     <main className="bg-gradient-to-br from-[#fef9f9] via-[#f5faff] to-[#e6f0ff] text-gray-800 min-h-screen flex flex-col">
       <header className="bg-white/80 backdrop-blur-md shadow-md sticky top-0 z-50">
@@ -468,7 +476,7 @@ const Dashboard = () => {
 
               <li>
                 <button
-                  onClick={() => setIsAccountPopupOpen(true)}
+                  onClick={() => setActivePage("account")}
                   className="hover:text-blue-500"
                 >
                   <User size={28} weight="fill" className="text-blue-700" />
@@ -479,7 +487,6 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Render halaman aktif */}
       {activePage === "dashboard" && (
         <DashboardContent
           user={user}
@@ -536,128 +543,32 @@ const Dashboard = () => {
           formatNumberWithDots={formatNumberWithDots}
         />
       )}
-
-      {/* === Popup Info Akun === */}
-      {isAccountPopupOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 relative">
-
-            {/* Tombol Tutup */}
-            <button
-              onClick={() => setIsAccountPopupOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 text-2xl font-bold"
-              aria-label="Tutup"
-            >
-              &times;
-            </button>
-
-            {/* Header */}
-            <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold text-blue-700">👤 Info Akun</h3>
-              <p className="text-sm text-gray-500 mt-1">Lihat profil, saldo & cuaca</p>
-            </div>
-
-            {/* Info Akun */}
-            <div className="bg-blue-50/50 rounded-xl p-4 text-center mb-4 shadow-inner">
-              <p className="text-lg font-semibold text-gray-800">
-                {user.displayName || "Pengguna Danaku"}
-              </p>
-              <p className="text-sm text-gray-600">{user.email}</p>
-            </div>
-
-            {/* Saldo */}
-            <div className="bg-green-50 rounded-xl p-4 text-center mb-4 shadow-inner">
-              <p className="text-sm text-gray-600 mb-1">Total Saldo</p>
-              <p className="text-2xl font-bold text-green-700">
-                {formatNumberWithDots(totalBalance)}
-              </p>
-            </div>
-
-            {/* Cuaca */}
-            <div className="bg-gray-50 rounded-xl p-4 text-center shadow-inner mb-6">
-              <h4 className="text-base font-semibold text-gray-700 mb-2">🌤️ Cuaca Sekarang</h4>
-              {weatherLoading && <p className="text-sm text-gray-500">Memuat data cuaca...</p>}
-              {weatherError && <p className="text-sm text-red-500">{weatherError}</p>}
-              {weatherData && (
-                <div className="flex flex-col items-center">
-                  <img src={weatherIcon} alt="ikon cuaca" className="w-14 h-14 mb-1" />
-                  <p className="text-sm font-medium text-gray-700 capitalize">
-                    {weatherData.weather[0].description}, {Math.round(weatherData.main.temp)}°C
-                  </p>
-                  <p className="text-xs text-gray-500">{weatherData.name}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Tombol Edit Profil */}
-            <button
-              onClick={() => {
-                setEditName(user.displayName || "");
-                setIsEditProfileOpen(true);
-                setIsAccountPopupOpen(false);
-              }}
-              className="w-full py-3 mb-3 bg-gray-100 text-gray-800 font-medium rounded-xl hover:bg-gray-200 transition"
-            >
-              ✏️ Edit Profil
-            </button>
-
-            {/* Logout */}
-            <button
-              onClick={handleLogout}
-              className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
+      
+      {activePage === "account" && (
+        <AccountPage
+          user={user}
+          totalBalance={totalBalance}
+          weatherData={weatherData}
+          weatherLoading={weatherLoading}
+          weatherError={weatherError}
+          isEditProfileOpen={isEditProfileOpen}
+          setIsEditProfileOpen={setIsEditProfileOpen}
+          editName={editName}
+          setEditName={setEditName}
+          handleUpdateProfile={handleUpdateProfile}
+          handleLogout={handleLogout}
+          formatCurrency={formatCurrency}
+          formatNumberWithDots={formatNumberWithDots}
+        />
       )}
-      {isEditProfileOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 relative">
-            
-            {/* Tombol Tutup */}
-            <button
-              onClick={() => setIsEditProfileOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 text-2xl font-bold"
-            >
-              &times;
-            </button>
 
-            <h3 className="text-2xl font-bold text-blue-700 text-center mb-4">✏️ Edit Profil</h3>
-
-            <div className="space-y-4">
-              {/* Ganti Nama */}
-              <div>
-                <label className="text-sm font-medium text-gray-600 block mb-1">Nama Lengkap</label>
-                <input
-                  type="text"
-                  className="w-full p-3 border rounded-lg"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-              </div>
-
-              {/* Tombol Simpan */}
-              <button
-                onClick={handleUpdateProfile}
-                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition"
-              >
-                Simpan Perubahan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* === Modal Kelola Transaksi === */}
       {isManageModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-3xl shadow-lg relative max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4 text-blue-700">Kelola Transaksi</h2>
-            {/* Tombol tutup modal */}
             <button onClick={() => setIsManageModalOpen(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold">
               &times;
             </button>
-
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm text-left">
                 <thead className="bg-blue-50 text-gray-600">
@@ -729,10 +640,7 @@ const Dashboard = () => {
                 Hapus Terpilih ({selectedTransactions.length})
               </button>
               <button
-                onClick={() => {
-                  setIsManageModalOpen(false);
-                  setSelectedTransactions([]);
-                }}
+                onClick={() => setIsManageModalOpen(false)}
                 className="text-gray-600 hover:text-gray-800 px-4 py-2 rounded-xl transition"
               >
                 Batal
@@ -742,7 +650,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* === Modal Konfirmasi Hapus Kustom === */}
       {isConfirmDeleteOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm mx-4 relative text-center">

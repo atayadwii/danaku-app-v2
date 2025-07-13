@@ -57,7 +57,7 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
               </defs>
               <CartesianGrid stroke="#f0f0f0" strokeDasharray="3 3" />
               <XAxis dataKey="name" />
-              <YAxis formatter={(value) => formatCurrency(value, 'IDR')} /> {/* Asumsi mata uang default IDR untuk grafik */}
+              <YAxis formatter={(value) => formatCurrency(value, 'IDR')} />
               <Tooltip formatter={(value) => formatCurrency(value, 'IDR')} />
               <Legend />
               <Bar dataKey="value" fill="url(#colorGradient)" radius={[10, 10, 0, 0]} />
@@ -80,9 +80,11 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
           ) : (
             wallets.map(wallet => (
               <div key={wallet.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-                <h4 className="font-semibold text-lg text-blue-700">{wallet.name}</h4>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-semibold text-blue-700">{wallet.name}</h4>
+                </div>
                 <p className="text-sm text-gray-500">
-                  Saldo: <strong>{formatCurrency(wallet.balance, wallet.currency)}</strong>
+                  Saldo: <strong className="text-base font-bold">{formatCurrency(wallet.balance, wallet.currency)}</strong>
                 </p>
                 <div className="mt-4">
                   <h5 className="font-medium text-sm text-gray-600 mb-2">Riwayat Transaksi Terbaru</h5>
