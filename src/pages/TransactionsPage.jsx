@@ -1,24 +1,93 @@
-import React, { useState, useEffect } from "react";
-import { Trash, Plus } from "phosphor-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Trash, Plus, CaretDown } from "phosphor-react";
 
+// =====================================================================
+// DITAMBAHKAN: Komponen dropdown kustom yang reusable
+// =====================================================================
+const CustomSelect = ({ label, options, value, onChange, placeholder = "Pilih salah satu" }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef(null);
+
+  // Efek untuk menutup dropdown saat user klik di luar area komponen
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const selectedOption = options.find(option => option.value === value);
+
+  return (
+    <div className="relative" ref={selectRef}>
+      {label && <label className="text-sm font-medium text-gray-600 mb-1 block">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex justify-between items-center w-full p-3 border rounded-lg bg-white text-left"
+      >
+        <span className={selectedOption ? 'text-gray-800' : 'text-gray-400'}>
+            {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <CaretDown size={20} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <ul className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+          {options.map(option => (
+            <li
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="p-3 text-gray-800 hover:bg-blue-50 cursor-pointer"
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+
+// =====================================================================
+// KOMPONEN UTAMA: TransactionsPage
+// =====================================================================
 const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurrency, isManageModalOpen, setIsManageModalOpen, selectedTransactions, setSelectedTransactions, setIsConfirmDeleteOpen, handleAddTransaction, handleAddWallet, handleDeleteWallet, parseNumberFromFormattedString, formatNumberWithDots }) => {
+  
+  const expenseCategories = ['Jajan', 'Kebutuhan', 'Gaya Hidup', 'Hutang'];
+  const incomeCategories = ['Gajian'];
+
   const [newTransaction, setNewTransaction] = useState({
     type: 'pengeluaran',
-    category: '',
+    category: expenseCategories[0],
+    description: '',
     amount: '',
     date: '',
-    walletId: '' // DIBENARKAN: Inisialisasi awal dengan string kosong
+    walletId: ''
   });
 
-  // DIBENARKAN: Gunakan useEffect untuk sinkronisasi state
   useEffect(() => {
-    if (wallets.length > 0 && newTransaction.walletId === '') {
-      setNewTransaction(prev => ({
-        ...prev,
-        walletId: wallets[0].id
-      }));
+    if (wallets.length > 0 && !newTransaction.walletId) {
+      setNewTransaction(prev => ({ ...prev, walletId: wallets[0].id }));
     }
   }, [wallets, newTransaction.walletId]);
+
+  useEffect(() => {
+    setNewTransaction(prev => ({
+      ...prev,
+      category: prev.type === 'pengeluaran' ? expenseCategories[0] : incomeCategories[0]
+    }));
+  }, [newTransaction.type]);
+
 
   const [isCreateWalletModalOpen, setIsCreateWalletModalOpen] = useState(false);
   const [newWallet, setNewWallet] = useState({
@@ -33,11 +102,18 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
   const handleSubmitTransaction = async (e) => {
     e.preventDefault();
     if (!newTransaction.category || newTransaction.amount === '' || !newTransaction.date || !newTransaction.walletId) {
-      alert("Semua kolom harus diisi.");
+      alert("Semua kolom (kecuali keterangan) harus diisi.");
       return;
     }
     await handleAddTransaction(newTransaction);
-    setNewTransaction({ type: 'pengeluaran', category: '', amount: '', date: '', walletId: wallets.length > 0 ? wallets[0].id : '' });
+    setNewTransaction({ 
+      type: 'pengeluaran', 
+      category: expenseCategories[0], 
+      description: '', 
+      amount: '', 
+      date: '', 
+      walletId: wallets.length > 0 ? wallets[0].id : '' 
+    });
   };
   
   const handleSubmitNewWallet = async (e) => {
@@ -66,53 +142,52 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
       
       {!isManageModalOpen && wallets.length > 0 && (
         <form id="transaction-form" className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmitTransaction}>
+          
+          <CustomSelect
+            label="Dompet"
+            value={newTransaction.walletId}
+            onChange={(value) => setNewTransaction({ ...newTransaction, walletId: value })}
+            options={wallets.map(wallet => ({
+              value: wallet.id,
+              label: `${wallet.name} (${wallet.currency})`
+            }))}
+            placeholder="Pilih dompet"
+          />
+
+          <CustomSelect
+            label="Jenis"
+            value={newTransaction.type}
+            onChange={(value) => setNewTransaction({ ...newTransaction, type: value })}
+            options={[
+              { value: 'pengeluaran', label: 'Pengeluaran' },
+              { value: 'pemasukan', label: 'Pemasukan' }
+            ]}
+          />
+
+          <CustomSelect
+            label="Kategori"
+            value={newTransaction.category}
+            onChange={(value) => setNewTransaction({ ...newTransaction, category: value })}
+            options={(newTransaction.type === 'pengeluaran' ? expenseCategories : incomeCategories).map(cat => ({
+              value: cat,
+              label: cat
+            }))}
+          />
+          
           <div>
-            <label htmlFor="transaction-wallet" className="text-sm font-medium text-gray-600">Dompet</label>
-            <select
-              id="transaction-wallet"
+            <label htmlFor="transaction-description" className="text-sm font-medium text-gray-600 mb-1 block">Keterangan (Opsional)</label>
+            <input
+              type="text"
+              id="transaction-description"
+              placeholder="Contoh: Beli nasi padang"
               className="mt-1 block w-full p-3 border rounded-lg"
-              value={newTransaction.walletId}
-              onChange={(e) => setNewTransaction({ ...newTransaction, walletId: e.target.value })}
-              required
-            >
-              {wallets.length === 0 ? (
-                <option value="" disabled>Buat dompet terlebih dahulu</option>
-              ) : (
-                wallets.map(wallet => (
-                  <option key={wallet.id} value={wallet.id}>
-                    {wallet.name} ({wallet.currency})
-                  </option>
-                ))
-              )}
-            </select>
+              value={newTransaction.description}
+              onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
+            />
           </div>
 
           <div>
-            <label htmlFor="transaction-type" className="text-sm font-medium text-gray-600">Jenis</label>
-            <select
-              id="transaction-type"
-              className="mt-1 block w-full p-3 border rounded-lg"
-              value={newTransaction.type}
-              onChange={(e) => setNewTransaction({ ...newTransaction, type: e.target.value })}
-            >
-              <option value="pengeluaran">Pengeluaran</option>
-              <option value="pemasukan">Pemasukan</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="transaction-category" className="text-sm font-medium text-gray-600">Kategori</label>
-            <input
-              type="text"
-              id="transaction-category"
-              required
-              placeholder="Contoh: Makan, Gaji"
-              className="mt-1 block w-full p-3 border rounded-lg"
-              value={newTransaction.category}
-              onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-            />
-          </div>
-          <div>
-            <label htmlFor="transaction-amount" className="text-sm font-medium text-gray-600">Jumlah</label>
+            <label htmlFor="transaction-amount" className="text-sm font-medium text-gray-600 mb-1 block">Jumlah</label>
             <input
               type="text"
               id="transaction-amount"
@@ -121,16 +196,12 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
               className="mt-1 block w-full p-3 border rounded-lg"
               value={formatNumberWithDots(newTransaction.amount)}
               onChange={(e) => setNewTransaction({ ...newTransaction, amount: parseNumberFromFormattedString(e.target.value) })}
-              onFocus={(e) => {
-                e.target.value = newTransaction.amount === '' ? '' : String(newTransaction.amount);
-              }}
-              onBlur={(e) => {
-                e.target.value = formatNumberWithDots(newTransaction.amount);
-              }}
+              onFocus={(e) => { e.target.value = newTransaction.amount === '' ? '' : String(newTransaction.amount); }}
+              onBlur={(e) => { e.target.value = formatNumberWithDots(newTransaction.amount); }}
             />
           </div>
           <div>
-            <label htmlFor="transaction-date" className="text-sm font-medium text-gray-600">Tanggal</label>
+            <label htmlFor="transaction-date" className="text-sm font-medium text-gray-600 mb-1 block">Tanggal</label>
             <input
               type="date"
               id="transaction-date"
@@ -160,7 +231,7 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
             <h3 className="text-2xl font-bold text-blue-700 text-center mb-4">Buat Dompet Baru</h3>
             <form onSubmit={handleSubmitNewWallet} className="space-y-4">
               <div>
-                <label htmlFor="wallet-name" className="text-sm font-medium text-gray-600">Nama Dompet</label>
+                <label htmlFor="wallet-name" className="text-sm font-medium text-gray-600 mb-1 block">Nama Dompet</label>
                 <input
                   type="text"
                   id="wallet-name"
@@ -170,20 +241,15 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
                   required
                 />
               </div>
-              <div>
-                <label htmlFor="wallet-currency" className="text-sm font-medium text-gray-600">Mata Uang Dompet</label>
-                <select
-                  id="wallet-currency"
-                  className="w-full p-3 border rounded-lg"
-                  value={newWallet.currency}
-                  onChange={(e) => setNewWallet({ ...newWallet, currency: e.target.value })}
-                  required
-                >
-                  {currencyOptions.map(currency => (
-                    <option key={currency} value={currency}>{currency}</option>
-                  ))}
-                </select>
-              </div>
+              <CustomSelect
+                label="Mata Uang Dompet"
+                value={newWallet.currency}
+                onChange={(value) => setNewWallet({ ...newWallet, currency: value })}
+                options={currencyOptions.map(currency => ({
+                  value: currency,
+                  label: currency
+                }))}
+              />
               <button
                 type="submit"
                 className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition"
@@ -224,7 +290,6 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
         </div>
       </div>
 
-
       <div className="mt-10">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-lg sm:text-xl font-semibold">📑 Riwayat Transaksi</h3>
@@ -242,25 +307,30 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
                 <th className="py-3 px-5">Tanggal</th>
                 <th className="py-3 px-5">Jenis</th>
                 <th className="py-3 px-5">Kategori</th>
+                <th className="py-3 px-5">Keterangan</th>
                 <th className="py-3 px-5">Jumlah</th>
                 <th className="py-3 px-5">Dompet</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {transactions.length === 0 ? (
-                <tr><td colSpan="5" className="text-center py-4 text-gray-500">Belum ada transaksi.</td></tr>
+                <tr><td colSpan="6" className="text-center py-4 text-gray-500">Belum ada transaksi.</td></tr>
               ) : (
-                transactions.slice().reverse().map((t, i) => {
-                  const wallet = wallets.find(w => w.id === t.walletId) || { currency: 'IDR', name: 'N/A' };
-                  return (
-                    <tr key={i}>
-                      <td className="px-6 py-4 text-sm">{t.date}</td>
-                      <td className={`px-6 py-4 text-sm ${t.type === "pengeluaran" ? "text-red-600" : "text-green-600"}`}>{t.type}</td>
-                      <td className="px-6 py-4 text-sm">{t.category}</td>
-                      <td className="px-6 py-4 text-sm">{formatCurrency(t.amount, wallet.currency)}</td>
-                      <td className="px-6 py-4 text-sm">{wallet.name}</td>
-                    </tr>
-                  );
+                transactions
+                  .slice()
+                  .sort((a, b) => new Date(b.date) - new Date(a.date))
+                  .map((t, i) => {
+                    const wallet = wallets.find(w => w.id === t.walletId) || { currency: 'IDR', name: 'N/A' };
+                    return (
+                      <tr key={i}>
+                        <td className="px-6 py-4 text-sm">{t.date}</td>
+                        <td className={`px-6 py-4 text-sm font-medium ${t.type === "pengeluaran" ? "text-red-600" : "text-green-600"}`}>{t.type}</td>
+                        <td className="px-6 py-4 text-sm">{t.category}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{t.description || '-'}</td>
+                        <td className="px-6 py-4 text-sm font-semibold">{formatCurrency(t.amount, wallet.currency)}</td>
+                        <td className="px-6 py-4 text-sm">{wallet.name}</td>
+                      </tr>
+                    );
                 })
               )}
             </tbody>

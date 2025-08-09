@@ -4,16 +4,46 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Toolti
 
 const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, savingsPockets, transactions, wallets, formatCurrency, handleAddAmount, handleSubtractAmount, handleDeletePocket, handleInputChange, inputAmounts, formatNumberWithDots, parseNumberFromFormattedString }) => {
 
-  const expenseData = transactions.filter(t => t.type === "pengeluaran")
-    .reduce((acc, curr) => {
-      const existingCategory = acc.find(item => item.name === curr.category);
-      if (existingCategory) {
-        existingCategory.value += curr.amount;
+  // =======================================================================
+  // Logika yang BENAR untuk memproses data chart sesuai kategori yang valid
+  // =======================================================================
+  const processExpenseDataForChart = () => {
+    // 1. Tentukan kategori pengeluaran yang valid
+    const validCategories = ['Jajan', 'Kebutuhan', 'Gaya Hidup', 'Hutang'];
+    let categoryTotals = {
+      'Jajan': 0,
+      'Kebutuhan': 0,
+      'Gaya Hidup': 0,
+      'Hutang': 0,
+      'Lainnya': 0, // Untuk kategori lama/tidak sesuai
+    };
+
+    // 2. Filter hanya transaksi pengeluaran
+    const expenses = transactions.filter(t => t.type === 'pengeluaran');
+
+    // 3. Kelompokkan setiap transaksi ke dalam kategori yang benar
+    for (const expense of expenses) {
+      if (validCategories.includes(expense.category)) {
+        categoryTotals[expense.category] += expense.amount;
       } else {
-        acc.push({ name: curr.category, value: curr.amount });
+        // Jika kategori tidak valid, masukkan ke 'Lainnya'
+        categoryTotals['Lainnya'] += expense.amount;
       }
-      return acc;
-    }, []);
+    }
+
+    // 4. Ubah format data agar bisa dibaca oleh chart
+    const chartData = Object.keys(categoryTotals).map(categoryName => ({
+      name: categoryName,
+      value: categoryTotals[categoryName]
+    }))
+    .filter(item => item.value > 0) // Hanya tampilkan bar jika ada isinya
+    .sort((a, b) => b.value - a.value); // Urutkan dari terbesar
+
+    return chartData;
+  };
+
+  const expenseData = processExpenseDataForChart();
+  // =======================================================================
 
   return (
     <section className="container mx-auto px-4 sm:px-6 py-8 bg-white/90 rounded-2xl shadow-xl p-6 sm:p-10">
@@ -25,7 +55,6 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
         <div className="card-glass p-6 rounded-xl shadow-md text-center">
           <Wallet size={48} className="text-blue-600 mb-2 mx-auto" />
           <p className="text-base sm:text-lg text-gray-600">Total Uang Dimiliki</p>
-          {/* DIBENARKAN: totalBalance kini adalah jumlah dari semua dompet */}
           <p className="text-3xl sm:text-4xl font-bold text-blue-800">{formatNumberWithDots(totalBalance)}</p>
         </div>
         <div className="card-glass p-6 rounded-xl shadow-md text-center">
@@ -42,12 +71,7 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
           <ResponsiveContainer width="100%" height={300}>
             <BarChart
               data={expenseData}
-              margin={{
-                top: 5,
-                right: 30,
-                left: 20,
-                bottom: 5,
-              }}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5, }}
             >
               <defs>
                 <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
@@ -57,10 +81,10 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
               </defs>
               <CartesianGrid stroke="#f0f0f0" strokeDasharray="3 3" />
               <XAxis dataKey="name" />
-              <YAxis formatter={(value) => formatCurrency(value, 'IDR')} />
-              <Tooltip formatter={(value) => formatCurrency(value, 'IDR')} />
-              <Legend />
-              <Bar dataKey="value" fill="url(#colorGradient)" radius={[10, 10, 0, 0]} />
+              <YAxis tickFormatter={(value) => new Intl.NumberFormat('id-ID', { notation: 'compact', compactDisplay: 'short' }).format(value)} />
+              <Tooltip formatter={(value, name, props) => [formatCurrency(value, 'IDR'), "Total"]} />
+              <Legend formatter={(value) => "Total Pengeluaran"}/>
+              <Bar dataKey="value" name="Pengeluaran" fill="url(#colorGradient)" radius={[10, 10, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -71,7 +95,7 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
         </div>
       )}
 
-      {/* FITUR BARU: Bagian untuk menampilkan dompet */}
+      {/* DIKEMBALIKAN: Bagian Dompet Anda */}
       <div className="mt-10">
         <h3 className="text-lg sm:text-xl font-semibold mb-3">👛 Dompet Anda</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -91,7 +115,7 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
                   <ul className="space-y-2 text-xs">
                     {transactions
                       .filter(t => t.walletId === wallet.id)
-                      .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds)
+                      .sort((a, b) => new Date(b.date) - new Date(a.date))
                       .slice(0, 3)
                       .map((t, i) => (
                         <li key={i} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg">
@@ -114,11 +138,12 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
         </div>
       </div>
 
+      {/* DIKEMBALIKAN: Bagian Kantong Tabungan Anda */}
       <div className="mt-10">
         <h3 className="text-lg sm:text-xl font-semibold mb-3">🎁 Kantong Tabungan Anda</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {savingsPockets.map((pocket, index) => {
-            const percentRaw = (pocket.currentAmount / pocket.target) * 100;
+            const percentRaw = pocket.target > 0 ? (pocket.currentAmount / pocket.target) * 100 : 0;
             const percent = Math.max(0, Math.round(percentRaw));
 
             return (
@@ -126,56 +151,24 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
                 <div className="flex justify-between items-center">
                   <h4 className="font-semibold text-lg text-blue-700">{pocket.name}</h4>
                   <div className="space-x-2">
-                    <button
-                      onClick={() => handleAddAmount(index)}
-                      className="text-green-600 font-bold text-xl"
-                      title="Tambah Dana"
-                    >
-                      +
-                    </button>
-                    <button
-                      onClick={() => handleSubtractAmount(index)}
-                      className="text-yellow-600 font-bold text-xl"
-                      title="Kurangi Dana"
-                    >
-                      −
-                    </button>
-                    <button
-                      onClick={() => handleDeletePocket(index)}
-                      className="text-red-500 font-bold text-xl"
-                      title="Hapus Kantong"
-                    >
-                      ×
-                    </button>
+                    <button onClick={() => handleAddAmount(index)} className="text-green-600 font-bold text-xl" title="Tambah Dana">+</button>
+                    <button onClick={() => handleSubtractAmount(index)} className="text-yellow-600 font-bold text-xl" title="Kurangi Dana">−</button>
+                    <button onClick={() => handleDeletePocket(index)} className="text-red-500 font-bold text-xl" title="Hapus Kantong">×</button>
                   </div>
                 </div>
-
-                <p className="text-sm text-gray-500">
-                  Target: <strong>{formatNumberWithDots(pocket.target)}</strong>
-                </p>
-                <p className={`text-sm ${pocket.currentAmount < 0 ? "text-red-500" : "text-green-600"}`}>
-                  Terkumpul: <strong>{formatNumberWithDots(pocket.currentAmount)}</strong>
-                </p>
-
+                <p className="text-sm text-gray-500">Target: <strong>{formatNumberWithDots(pocket.target)}</strong></p>
+                <p className={`text-sm ${pocket.currentAmount < 0 ? "text-red-500" : "text-green-600"}`}>Terkumpul: <strong>{formatNumberWithDots(pocket.currentAmount)}</strong></p>
                 <input
                   type="text"
                   placeholder="Jumlah dana"
                   className="mt-2 w-full p-2 border border-gray-300 rounded"
                   value={formatNumberWithDots(inputAmounts[index])}
                   onChange={(e) => handleInputChange(index, parseNumberFromFormattedString(e.target.value))}
-                  onFocus={(e) => {
-                    e.target.value = inputAmounts[index] === '' ? '' : String(inputAmounts[index]);
-                  }}
-                  onBlur={(e) => {
-                    e.target.value = formatNumberWithDots(inputAmounts[index]);
-                  }}
+                  onFocus={(e) => { e.target.value = inputAmounts[index] === '' ? '' : String(inputAmounts[index]); }}
+                  onBlur={(e) => { e.target.value = formatNumberWithDots(inputAmounts[index]); }}
                 />
-
                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden mt-2">
-                  <div
-                    className="bg-green-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${percent}%` }}
-                  ></div>
+                  <div className="bg-green-500 h-full rounded-full transition-all duration-300" style={{ width: `${percent}%` }}></div>
                 </div>
                 <p className="text-xs text-right text-gray-500 mt-1">{percent}% tercapai</p>
               </div>
@@ -183,6 +176,8 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
           })}
         </div>
       </div>
+      
+      {/* DIKEMBALIKAN: Bagian Transaksi Terbaru */}
       <div className="mt-10">
         <h3 className="text-lg sm:text-xl font-semibold mb-3">📋 Transaksi Terbaru</h3>
         <div className="overflow-x-auto bg-white rounded-xl shadow-md">
@@ -200,18 +195,21 @@ const DashboardContent = ({ user, welcomeMessage, totalBalance, largestExpense, 
               {transactions.length === 0 ? (
                 <tr><td colSpan="5" className="text-center py-4 text-gray-500">Belum ada transaksi.</td></tr>
               ) : (
-                transactions.slice(-5).reverse().map((t, i) => {
-                  const wallet = wallets.find(w => w.id === t.walletId) || { currency: 'IDR', name: 'N/A' };
-                  return (
-                    <tr key={i}>
-                      <td className="px-6 py-4 text-sm">{t.date}</td>
-                      <td className={`px-6 py-4 text-sm ${t.type === "pengeluaran" ? "text-red-600" : "text-green-600"}`}>{t.type}</td>
-                      <td className="px-6 py-4 text-sm">{t.category}</td>
-                      <td className="px-6 py-4 text-sm">{formatCurrency(t.amount, wallet.currency)}</td>
-                      <td className="px-6 py-4 text-sm">{wallet.name}</td>
-                    </tr>
-                  );
-                })
+                transactions
+                  .sort((a, b) => new Date(b.date) - new Date(a.date))
+                  .slice(0, 5)
+                  .map((t, i) => {
+                    const wallet = wallets.find(w => w.id === t.walletId) || { currency: 'IDR', name: 'N/A' };
+                    return (
+                      <tr key={i}>
+                        <td className="px-6 py-4 text-sm">{t.date}</td>
+                        <td className={`px-6 py-4 text-sm ${t.type === "pengeluaran" ? "text-red-600" : "text-green-600"}`}>{t.type}</td>
+                        <td className="px-6 py-4 text-sm">{t.category}</td>
+                        <td className="px-6 py-4 text-sm">{formatCurrency(t.amount, wallet.currency)}</td>
+                        <td className="px-6 py-4 text-sm">{wallet.name}</td>
+                      </tr>
+                    );
+                  })
               )}
             </tbody>
           </table>
