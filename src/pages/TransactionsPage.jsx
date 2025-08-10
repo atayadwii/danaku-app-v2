@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Trash, Plus, CaretDown, CaretUp } from "phosphor-react";
 
-// =====================================================================
-// Komponen CustomSelect (Tidak ada perubahan)
-// =====================================================================
+// Komponen CustomSelect
 const CustomSelect = ({ label, options, value, onChange, placeholder = "Pilih salah satu" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef(null);
@@ -50,10 +48,8 @@ const CustomSelect = ({ label, options, value, onChange, placeholder = "Pilih sa
 };
 
 
-// =====================================================================
 // KOMPONEN UTAMA: TransactionsPage
-// =====================================================================
-const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurrency, isManageModalOpen, setIsManageModalOpen, selectedTransactions, setSelectedTransactions, setIsConfirmDeleteOpen, handleAddTransaction, handleAddWallet, handleDeleteWallet, parseNumberFromFormattedString, formatNumberWithDots }) => {
+const TransactionsPage = ({ user, transactions, wallets, activeWallets, formatCurrency, isManageModalOpen, setIsManageModalOpen, selectedTransactions, setSelectedTransactions, setIsConfirmDeleteOpen, handleAddTransaction, handleAddWallet, handleDeleteWallet, parseNumberFromFormattedString, formatNumberWithDots }) => {
   
   const expenseCategories = ['Jajan', 'Kebutuhan', 'Gaya Hidup', 'Hutang'];
   const incomeCategories = ['Gajian'];
@@ -72,10 +68,14 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
   });
 
   useEffect(() => {
-    if (wallets.length > 0 && !newTransaction.walletId) {
-      setNewTransaction(prev => ({ ...prev, walletId: wallets[0].id }));
+    // Set dompet default untuk form jika belum ada dan ada dompet aktif
+    if (activeWallets && activeWallets.length > 0 && !newTransaction.walletId) {
+      setNewTransaction(prev => ({ ...prev, walletId: activeWallets[0].id }));
+    } else if (activeWallets && activeWallets.length === 0) {
+      setNewTransaction(prev => ({ ...prev, walletId: '' }));
     }
-  }, [wallets, newTransaction.walletId]);
+  }, [activeWallets, newTransaction.walletId]);
+
 
   useEffect(() => {
     setNewTransaction(prev => ({
@@ -99,7 +99,7 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
     await handleAddTransaction(newTransaction);
     setNewTransaction({ 
       type: 'pengeluaran', category: expenseCategories[0], description: '', 
-      amount: '', date: '', walletId: wallets.length > 0 ? wallets[0].id : '' 
+      amount: '', date: '', walletId: activeWallets.length > 0 ? activeWallets[0].id : '' 
     });
     setIsFormVisible(false);
   };
@@ -138,11 +138,30 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
           </div>
         </div>
         
-        {isFormVisible && wallets.length > 0 && (
+        {isFormVisible && (
           <form id="transaction-form" className="grid gap-4 sm:grid-cols-2 mt-6" onSubmit={handleSubmitTransaction}>
-            <CustomSelect label="Dompet" value={newTransaction.walletId} onChange={(value) => setNewTransaction({ ...newTransaction, walletId: value })} options={wallets.map(wallet => ({ value: wallet.id, label: `${wallet.name} (${wallet.currency})` }))} placeholder="Pilih dompet"/>
-            <CustomSelect label="Jenis" value={newTransaction.type} onChange={(value) => setNewTransaction({ ...newTransaction, type: value })} options={[{ value: 'pengeluaran', label: 'Pengeluaran' },{ value: 'pemasukan', label: 'Pemasukan' }]}/>
-            <CustomSelect label="Kategori" value={newTransaction.category} onChange={(value) => setNewTransaction({ ...newTransaction, category: value })} options={(newTransaction.type === 'pengeluaran' ? expenseCategories : incomeCategories).map(cat => ({ value: cat, label: cat }))}/>
+            <CustomSelect 
+              label="Dompet" 
+              value={newTransaction.walletId} 
+              onChange={(value) => setNewTransaction({ ...newTransaction, walletId: value })} 
+              options={activeWallets.map(wallet => ({
+                value: wallet.id, 
+                label: `${wallet.name} (${wallet.currency})` 
+              }))} 
+              placeholder="Pilih dompet aktif"
+            />
+            <CustomSelect 
+              label="Jenis" 
+              value={newTransaction.type} 
+              onChange={(value) => setNewTransaction({ ...newTransaction, type: value })} 
+              options={[{ value: 'pengeluaran', label: 'Pengeluaran' },{ value: 'pemasukan', label: 'Pemasukan' }]}
+            />
+            <CustomSelect 
+              label="Kategori" 
+              value={newTransaction.category} 
+              onChange={(value) => setNewTransaction({ ...newTransaction, category: value })} 
+              options={(newTransaction.type === 'pengeluaran' ? expenseCategories : incomeCategories).map(cat => ({ value: cat, label: cat }))}
+            />
             <div>
               <label htmlFor="transaction-description" className="text-sm font-medium text-gray-600 mb-1 block">Keterangan (Opsional)</label>
               <input type="text" id="transaction-description" placeholder="Contoh: Beli nasi padang" className="mt-1 block w-full p-3 border rounded-lg" value={newTransaction.description} onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}/>
@@ -156,7 +175,7 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
               <input type="date" id="transaction-date" required className="mt-1 block w-full p-3 border rounded-lg" value={newTransaction.date} onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}/>
             </div>
             <div className="sm:col-span-2">
-              <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition" disabled={wallets.length === 0}>
+              <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition" disabled={!activeWallets || activeWallets.length === 0}>
                 Tambah Transaksi
               </button>
             </div>
@@ -164,7 +183,6 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
         )}
       </div>
 
-      {/* DIKEMBALIKAN: Kode lengkap untuk Modal Buat Dompet Baru */}
       {isCreateWalletModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 relative">
@@ -223,7 +241,10 @@ const TransactionsPage = ({ user, transactions, wallets, fetchData, formatCurren
                             onChange={(value) => setSelectedWalletId(value)}
                             options={[
                                 { value: 'all', label: 'Semua Dompet' },
-                                ...wallets.map(w => ({ value: w.id, label: w.name }))
+                                ...wallets.map(w => ({ 
+                                    value: w.id, 
+                                    label: `${w.name}${w.isArchived ? ' (Arsip)' : ''}` 
+                                }))
                             ]}
                         />
                     </div>
